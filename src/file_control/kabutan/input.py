@@ -38,7 +38,7 @@ def input_price_file(exclude=False, exclude_by_count=False):
         with open(exclude_file, 'r') as f:
             exclude_list = [code.replace('\n', '') for code in f.readlines()]
 
-    for file in glob.glob('{}/{}'.format(config.input_path, 'price_*.csv')):
+    for file in glob.glob('{}/{}'.format(config.kabutan_input_path, 'price_*.csv')):
         # ファイル名からコードを取得
         code = re.sub('price_|.csv', '', basename(file))
     
@@ -123,7 +123,7 @@ def input_trade_file(raw=False, exclude=False):
         with open(exclude_file, 'r') as f:
             exclude_list = [code.replace('\n', '') for code in f.readlines()]
 
-    for file in glob.glob('{}/{}'.format(config.input_path, 'trade_*.csv')):
+    for file in glob.glob('{}/{}'.format(config.kabutan_input_path, 'trade_*.csv')):
         # ファイル名からコードを取得
         code = re.sub('trade_|.csv', '', basename(file))
     

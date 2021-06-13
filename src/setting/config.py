@@ -14,7 +14,13 @@ class Config():
         self._parser.read(path_to_config_file, encoding='utf_8')
 
     @property
-    def input_path(self):
+    def kabutan_input_path(self):
         section = 'DEFAULT'
-        key = 'inputDir'
+        key = 'kabutanInputDir'
+        return self._parser.get(section, key)
+
+    @property
+    def sbi_input_path(self):
+        section = 'DEFAULT'
+        key = 'sbiInputDir'
         return self._parser.get(section, key)
