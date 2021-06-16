@@ -1,0 +1,35 @@
+version: "3"
+services:
+  app:
+    build:
+      context: infra/app
+      dockerfile: Dockerfile
+    container_name: stock_app
+    env_file:
+      - ./infra/common/.env
+    depends_on:
+      - db
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    ports:
+      - 8888:8888
+    volumes:
+      - ./no_commit:/app/data
+      - ./src:/app/src
+    restart: always
+    command: start-notebook.sh --NotebookApp.token=''
+  db:
+    image: mysql:8.0
+    container_name: stock_db
+    env_file:
+      - ./infra/common/.env
+    ports:
+      - 3306:3306
+    volumes:
+      - stock-db-store:/var/lib/mysql
+      - ./log/db:/var/log/mysql
+      - "./infra/db/init:/docker-entrypoint-initdb.d"
+    restart: always
+    tty: true
+volumes:
+  stock-db-store:

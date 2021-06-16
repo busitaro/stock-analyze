@@ -13,7 +13,7 @@ from setting.config import Config
 exclude_file = 'file/exclude.lst'
 
 
-def input_price_file(exclude=False):
+def input_file(exclude=False):
     """
     SBIのprice.csvファイルを読み込む
 
