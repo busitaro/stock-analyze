@@ -1,8 +1,15 @@
+from datetime import date
+
+import pandas as pd
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.schema import Column
 from sqlalchemy.types import DECIMAL, VARCHAR, DATE
 
+from database import make_session
+
+
 Base = declarative_base()
+
 
 class DailyChart(Base):
     __tablename__ = 'daily_chart'
@@ -19,3 +26,34 @@ class DailyChart(Base):
     def __repr__(self):
         return '<daily_chart chart_date={chart_date} description_code={description_code}>' \
             .format(chart_date=self.chart_date, description_code=self.description_code)
+
+    @staticmethod
+    def columns():
+        return (
+            DailyChart.chart_date,
+            DailyChart.description_code,
+            DailyChart.open,
+            DailyChart.high,
+            DailyChart.low,
+            DailyChart.close,
+            DailyChart.turnover,
+            DailyChart.vwap,
+            DailyChart.execution_count,
+        )
+
+    @staticmethod
+    def column_names():
+        return DailyChart.__table__.c.keys()
+
+    @staticmethod
+    def all():
+        return pd.DataFrame(make_session().query(*DailyChart.columns()).all())
+
+    @staticmethod
+    def date_between(bgn_date: date, end_date: date):
+        rs = make_session() \
+            .query(*DailyChart.columns()) \
+            .filter(DailyChart.chart_date.between(bgn_date, end_date)) \
+            .all()
+
+        return pd.DataFrame(rs, columns=DailyChart.column_names())
