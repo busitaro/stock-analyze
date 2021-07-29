@@ -55,9 +55,10 @@ def import_db():
     # DBに存在するデータを取得し、不足分のみインサート
     begin_date = insert_data.min()['chart_date']
     end_date = insert_data.max()['chart_date']
-    stored_data = DailyChart.date_between(begin_date, end_date)[['chart_date']]
+    stored_data = DailyChart.date_between(begin_date, end_date)[['chart_date', 'description_code']]
     stored_data['exist'] = True
-    insert_data = pd.merge(insert_data, stored_data, how='left', left_on='chart_date', right_on='chart_date')
+
+    insert_data = pd.merge(insert_data, stored_data, how='left', on=['chart_date', 'description_code'])
     insert_data = insert_data[insert_data['exist'].isnull()].drop('exist', axis=1)
 
     # DBへ挿入
