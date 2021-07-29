@@ -56,4 +56,6 @@ class DailyChart(Base):
             .filter(DailyChart.chart_date.between(bgn_date, end_date)) \
             .all()
 
-        return pd.DataFrame(rs, columns=DailyChart.column_names())
+        data = pd.DataFrame(rs, columns=DailyChart.column_names())
+        data['chart_date'] = pd.to_datetime(data['chart_date'])
+        return data
