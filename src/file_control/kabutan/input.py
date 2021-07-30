@@ -14,7 +14,7 @@ from setting.config import Config
 exclude_file = 'file/exclude.lst'
 
 
-def input_price_file(exclude=False, exclude_by_count=False):
+def input_price_file(exclude=False, exclude_by_count=False, raw=False):
     """
     price.csvファイルを読み込む
 
@@ -32,7 +32,6 @@ def input_price_file(exclude=False, exclude_by_count=False):
     """
     config = Config()
     data = dict()
-    date_parser=lambda date: datetime.strptime(date, '%y/%m/%d')
     # 除外銘柄ファイルの読込
     if exclude:
         with open(exclude_file, 'r') as f:
@@ -45,15 +44,40 @@ def input_price_file(exclude=False, exclude_by_count=False):
         if exclude and code in exclude_list:
             continue
         try:
-            data[int(code)] = \
-                pd.read_csv(
+            d = pd.read_csv(
                     file, 
-                    names=['date', 'open', 'high', 'low', 'close', 'compare', 'compare_rate', 'turnover'],
-                    parse_dates=['date'], 
-                    index_col=['date'], 
-                    date_parser=date_parser, 
-                    thousands=',').sort_index()
-        except:
+                    names=['date', 'open', 'high', 'low', 'close', 'compare', 'compare_rate', 'turnover'])
+
+            if not raw:
+            # 型変換等
+                # indexの設定
+                d['date'] = pd.to_datetime(d['date'], format='%y/%m/%d')
+                d = d.set_index('date').sort_index()
+                # 各項目の設定
+                object_columns = d.select_dtypes(object).columns
+                if 'open' in object_columns:
+                    d['open'] = d['open'].str.replace('－', '-1')
+                    d['open'] = d['open'].str.replace(',', '').astype(float)
+                if 'high' in object_columns:
+                    d['high'] = d['high'].str.replace('－', '-1')
+                    d['high'] = d['high'].str.replace(',', '').astype(float)
+                if 'low' in object_columns:
+                    d['low'] = d['low'].str.replace('－', '-1')
+                    d['low'] = d['low'].str.replace(',', '').astype(float)
+                if 'close' in object_columns:
+                    d['close'] = d['close'].str.replace(',', '').astype(float)
+                if 'compare' in object_columns:
+                    d['compare'] = d['compare'].str.replace('－', '0')
+                    d['compare'] = d['compare'].str.replace(',', '').astype(float)
+                if 'compare_rate' in object_columns:
+                    d['compare_rate'] = d['compare_rate'].str.replace('－', '0')
+                    d['compare_rate'] = d['compare_rate'].str.replace(',', '').astype(float)
+                if 'turnover' in object_columns:
+                    d['turnover'] = d['turnover'].str.replace(',', '').astype(int)
+
+            data[int(code)] = d
+        except Exception as ex:
+            print(ex)
             print('input error code: {}'.format(code))
 
     if exclude_by_count:
