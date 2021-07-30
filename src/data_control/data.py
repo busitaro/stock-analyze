@@ -6,6 +6,29 @@ import warnings
 from datetime import datetime, timedelta
 
 
+def separate_by_code(data: pd.DataFrame):
+    """
+    銘柄コード毎に分かれていないpandasデータを
+    銘柄コードをkeyとしdictに分割する
+
+    Params
+    ---------
+    data: pd.DataFrame
+        分割対象のデータ
+
+    Returns
+    ---------
+    0: dict
+        分割した辞書データ
+    """
+    data_dict = {}
+
+    for code, d in data.groupby('description_code'):
+        data_dict[code] = d
+
+    return data_dict
+
+
 def change_data_length(data, length, from_top=False):
     """
     データの長さを調節する
