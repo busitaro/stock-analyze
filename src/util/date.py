@@ -62,8 +62,7 @@ class BusinessDay:
         # datetime.datetimeにして返却
         return before_dates.iloc[-1].date.to_pydatetime()
 
-
-def between(self, bgn_date: datetime, end_date: datetime):
+    def between(self, bgn_date: datetime, end_date: datetime):
         """
         指定された日付間の営業日のリストを取得する
 
@@ -85,3 +84,19 @@ def between(self, bgn_date: datetime, end_date: datetime):
             ]['date']
         )
         return business_day_list
+
+    def is_businessday(self, date):
+        """
+        指定された日付が営業日か判定する
+
+        Params
+        ---------
+        date: datetime.datetime
+            判定対象日
+
+        Returns
+        ---------
+        0: bool
+            True: 営業日 / False: 非営業日
+        """
+        return self.__file[self.__file.date == date].iloc[0]['business']
