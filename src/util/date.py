@@ -60,4 +60,4 @@ class BusinessDay:
             raise ValueError('指定された日付の営業日データがありません')
 
         # datetime.datetimeにして返却
-        return before_dates.tail(1).date.to_pydatetime()
+        return before_dates.iloc[-1].date.to_pydatetime()
