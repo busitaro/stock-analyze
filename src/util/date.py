@@ -60,4 +60,28 @@ class BusinessDay:
             raise ValueError('指定された日付の営業日データがありません')
 
         # datetime.datetimeにして返却
-        return before_dates.tail(1).date.to_pydatetime()
+        return before_dates.iloc[-1].date.to_pydatetime()
+
+
+def between(self, bgn_date: datetime, end_date: datetime):
+        """
+        指定された日付間の営業日のリストを取得する
+
+        Params
+        ---------
+        bgn_date: datetime.datetime
+            開始日
+        end_date: datetime.datetime
+            終了日
+
+        Returns
+        ---------
+        0: list
+            営業日のリスト
+        """
+        business_day_list = list(
+            self.__file[
+                (self.__file.date >= bgn_date) & (self.__file.date <= end_date) & (self.__file.business)
+            ]['date']
+        )
+        return business_day_list
