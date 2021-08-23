@@ -2,7 +2,7 @@ import copy
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-from analyze.data import calc_price_difference, calc_moving_average
+from data_control.data import calc_price_difference, calc_moving_average
 
 
 def show_graph(code_data, columns, colors):
