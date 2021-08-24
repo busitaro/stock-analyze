@@ -5,6 +5,8 @@ import re
 import warnings
 from datetime import datetime, timedelta
 
+from util.date import BusinessDay
+
 
 def separate_by_code(data: pd.DataFrame):
     """
@@ -27,6 +29,105 @@ def separate_by_code(data: pd.DataFrame):
         data_dict[code] = d
 
     return data_dict
+
+
+def combine_dict(data: dict):
+    """
+    銘柄コード毎に分かれたdictデータを
+    結合したpandasにする
+
+    Params
+    ---------
+    data: dict
+        結合対象の辞書データ
+
+    Returns
+    ---------
+    0: pd.DataFrame
+        結合したpandasデータ
+    """
+    data_list = list()
+    for code, code_data in data.items():
+        code_data['description_code'] = code
+        data_list.append(code_data)
+
+    return pd.concat(data_list)
+
+
+def filter_missing_stocks(data:dict, bgn_date: datetime, end_date: datetime):
+    """
+    全営業日分のデータがそろっていない銘柄を除去する
+
+    Params
+    ---------
+    data: dict
+        フィルタリングを行うdata (key: 銘柄コード, value: pandas Dataframe)
+    bgn_date: datetime.datetime
+        確認開始日
+    end_date: datetime.datetime
+        確認終了日
+
+    Returns
+    ---------
+    0: dict
+        フィルタリングした辞書データ
+    """
+    filtered_data = dict()
+
+    # 営業日のリストを取得
+    bs = BusinessDay()
+    business_days = set(bs.between(bgn_date, end_date))
+
+    for code, code_data in data.items():
+        dates = set(code_data['chart_date'])
+        if business_days.issubset(dates):
+            # すべての営業日をデータの日付が含んでいた場合
+            filtered_data[code] = code_data
+
+    return filtered_data
+
+
+def filter_no_exec_stocks(data, bgn_date: datetime, end_date: datetime):
+    """
+    出来がない(価格データがない)日が存在する銘柄を除外する
+
+    Params
+    ---------
+    data: dict
+        フィルタリングを行うdata (key: 銘柄コード, value: pandas Dataframe)
+    bgn_date: datetime.datetime
+        確認開始日
+    end_date: datetime.datetime
+        確認終了日
+
+    Returns
+    ---------
+    0: dict
+        フィルタリングした辞書データ
+    """
+    filtered_data = dict()
+
+    for code, code_data in data.items():
+        # パラメータで指定された日付範囲に絞る
+        check_data = code_data[(bgn_date <= code_data['chart_date']) & (code_data['chart_date'] <= end_date)]
+        if \
+        (
+            len(check_data[check_data['turnover'] == 0]) == 0 
+            and len(check_data[check_data['open'] == -1]) == 0
+        ):
+            # 出来高が0の日がない かつ 始値が-1の日がない
+            filtered_data[code] = code_data
+
+    return filtered_data
+
+
+def filter_disignated_stocks(data):
+    exclude_file = 'file/data_exclude.lst'
+    with open(exclude_file, 'r') as f:
+        exclude_list = [code.replace('\n', '') for code in f.readlines()]
+
+    filtered_data = dict(filter(lambda item: str(item[0]) not in exclude_list, data.items()))
+    return filtered_data
 
 
 def change_data_length(data, length, from_top=False):
@@ -288,24 +389,34 @@ def calc_fair_price_from_pbr():
     return pbr
 
 
-#######################
-# 移動平均とその標準偏差を算出する
-# data: data(dict形 or 単数pandas)
-# days: 移動平均の算出日数
-# column: 対象カラム
-#######################
-def calc_moving_average(data, days=10, column='end'):
+def calc_moving_average(data: dict, days: int=10, column: str='end'):
+    """
+    移動平均とその標準偏差を算出する
+
+    Params
+    ---------
+    data: dict
+        算出対象のデータ
+    days: int
+        移動平均、標準偏差の算出日数
+    column: str
+        算出対象カラム
+
+    Returns
+    ---------
+    算出後のデータ
+        移動平均 => m_avg_日数_カラム名
+        標準偏差 => m_std_日数_カラム名
+    """
     def calc(d):
         rolling = d.rolling(days)
         d = pd.concat([d, rolling.mean()[[column]].rename(columns={column: 'm_avg_{}_{}'.format(days, column)})], axis=1)
         d = pd.concat([d, rolling.std()[[column]].rename(columns={column: 'm_std_{}_{}'.format(days, column)})], axis=1)
         return d
 
-    if isinstance(data, dict):
-        for key, d in data.items():
-            data[key] = calc(d)
-    else:
-        data = calc(data)
+    for key, d in data.items():
+        data[key] = calc(d)
+
     return data
 
 
