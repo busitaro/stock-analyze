@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import Tuple
+from pickle import load
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 from keras.models import load_model
 
 from util.date import BusinessDay
@@ -13,26 +13,23 @@ from database.models import DailyChart
 
 
 stock_model = 'stock_model_202108290146.pickle'
+stored_scaler = 'scaler_dict_202109110933.pickle'
 bgn_datetime = datetime(2020, 3, 1)
 end_datetime = datetime(2021, 3, 31)
 
 
 class ModelPredict(Predict):
     scaling_target_columns = ['open', 'high', 'low', 'close', 'turnover', 'vwap']
-    predict_columns = ['open', 'vwap']
 
     def __init__(self):
-        # modelの読込
-        # self.__model = load_model(stock_model)
+        self.__prev_length = 5
+
         # DBデータの読込
         data = self.__prepare_data()
         self.__data = dt.calc_moving_average(data, days=10, column='open')
-        # modelに投入できる形に変形
-        prev_length=5
-        self.__data_for_predict = self.__prepare_data_for_predict(data, prev_length)
-        # 日付インデックス
+        # 日付インデックス (必要か確認)
         first_data = self.__data[next(iter(self.__data))]
-        self.__index = list(first_data['chart_date'])[prev_length:]
+        self.__index = list(first_data['chart_date'])
 
     def __prepare_data(self):
         all_data = DailyChart.date_between(bgn_datetime, end_datetime)
@@ -41,24 +38,51 @@ class ModelPredict(Predict):
         data = dt.filter_missing_stocks(data, bgn_datetime, end_datetime)
         data = dt.filter_no_exec_stocks(data, bgn_datetime, end_datetime)
         data = dt.filter_disignated_stocks(data)
-        # 銘柄のフィルタリング
-        # 直近終値が1000円以下の銘柄を対象とする
-        data = dt.filter_data(data, lambda d: int(d[-1:]['close']) <= 1000)
+
         return data
 
-    def __prepare_data_for_predict(self, data, prev_length):
-        data = self.__setup_columns(data)
-        data, self.__scaler_dict = self.__scaling_data(data)
-
-        data = self.__load_past_data(data, prev_length)
-        data = self.__convert_to_ndarray(data)
-        return data
-
-    def __setup_columns(self, data: dict):
+    def __setup_columns(self, data: dict) -> dict:
         target_columns = ['open', 'high', 'low', 'close', 'turnover', 'vwap']
         data = dt.to_float_type(data, target_columns)
         data = dt.filter_columns(data, target_columns)
         return data
+
+
+    def __prepare_data_for_predict(self, date: datetime):
+        # 指定日のデータを作成
+        data_for_predict = self.__extract_data_of_date(date)
+
+        # 必要カラムを抽出
+        data_for_predict = self.__setup_columns(data_for_predict)
+
+        # スケーリング
+        data_for_predict = self.__scaling_data(data_for_predict)
+
+        # 過去データを1レコードへ連結
+        data_for_predict = self.__load_past_data(data_for_predict)
+
+        # ndarrayへ変換
+        data_for_predict = self.__convert_to_ndarray(data_for_predict)
+
+        return data_for_predict
+
+
+    def __extract_data_of_date(self, date: datetime):
+        """
+        指定日付の予測に必要なデータを抽出する
+
+
+        """
+        extract_data = dict()
+        for code in self.__data:
+            code_data = self.__data[code].reset_index()
+            data_of_date = code_data[code_data['chart_date'] == date]
+            if len(data_of_date) == 0:
+                raise ValueError('指定日付の価格データが存在しません。 {}'.format(date))
+            data_position = data_of_date.index[0]
+            extract_data[code] = code_data[data_position - self.__prev_length + 1:data_position + 1]
+        return extract_data
+
 
     def __scaling_data(self, data: dict):
         """
@@ -73,17 +97,24 @@ class ModelPredict(Predict):
         ---------
         0 : dict
             スケーリング済のdata (key: 銘柄コード, value: pandas Dataframe)
-        1 : dict
-            scalerの辞書(key: 銘柄コード)
         """
+        # scalerのload
+        with open(stored_scaler, mode='rb') as f:
+            scaler_dict = load(f)
+
+        # scalerにある銘柄のみに絞り込む
+        filtered_data = dict()
+        code_list = list(data.keys())
+        for code in scaler_dict:
+            if code in code_list:
+                filtered_data[code] = data[code]
+
         # scalingの実施
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        scaler_dict = {code: MinMaxScaler(feature_range=(0, 1)) for code in data}
-        scaling_data, scaler_dict = dt.scaling(data, self.scaling_target_columns, scaler_dict)
+        scaling_data, _ = dt.scaling(filtered_data, self.scaling_target_columns, scaler_dict, fit=False)
 
-        return scaling_data, scaler_dict
+        return scaling_data
 
-    def __reverse_scaling_data(self, data: dict):
+    def __reverse_scaling_data(self, data: np.array):
         """
         スケーリングされたデータを元に戻す
 
@@ -94,17 +125,26 @@ class ModelPredict(Predict):
 
         Returns
         ---------
-        0: dict
+        0: np.array
             元に戻したデータ
         """
-        # 元に戻すデータに対応した銘柄コードのscalerを取得
-        scaler_dict = {code: scaler for code, scaler in self.__scaler_dict.items() if code in data.keys()}
+
+        # scalerのload
+        with open(stored_scaler, mode='rb') as f:
+            scaler_dict = load(f)
+
+        # dataをdictへ
+        data_dict = dict()
+        code_list = list(scaler_dict.keys())
+        for idx, code_data in enumerate(data):
+            data_dict[code_list[idx]] = pd.DataFrame(code_data, columns=self.scaling_target_columns)
+
         # reverse scaling
-        predict_data, _ = dt.scaling(data, self.scaling_target_columns, scaler_dict, inverse_option=True)
+        predict_data, _ = dt.scaling(data_dict, self.scaling_target_columns, scaler_dict, inverse_option=True)
 
         return predict_data
 
-    def __load_past_data(self, data: dict, n_prev: int):
+    def __load_past_data(self, data: dict):
         """
         データの各行に、過去データ行を追加
 
@@ -112,8 +152,6 @@ class ModelPredict(Predict):
         --------
         data: dict
             過去データを追加するdata (key: 銘柄コード, value: pandas.DataFrame)
-        n_prev: int
-            過去データのload日数
 
         Returns
         ---------
@@ -124,14 +162,15 @@ class ModelPredict(Predict):
         past_add_dict = dict()
 
         for code, df in data.items():
+            org_columns = df.columns
             # 過去データを取得
-            for prev in range(1, n_prev + 1):
-                past_columns = ['{}_t-{}'.format(colname, prev) for colname in df.columns]
-                past_df = df.shift(prev)
+            for prev in range(1, self.__prev_length):
+                past_columns = ['{}_t-{}'.format(colname, prev) for colname in org_columns]
+                past_df = df[org_columns].shift(prev)
                 past_df.rename(columns=dict(zip(past_df.columns, past_columns)), inplace=True)
                 df = pd.concat([df, past_df], axis=1)
             # 過去データがない部分を削除
-            df = df.drop(df.index[range(n_prev)])
+            df = df.drop(df.index[range(self.__prev_length - 1)])
             past_add_dict[code] = df
         return past_add_dict
 
@@ -140,31 +179,11 @@ class ModelPredict(Predict):
         必要なカラムを抽出し、ndarrayへ変換する
 
         """
-        need_cols = ['open', 'high', 'low', 'close', 'turnover', 'vwap', \
-                            'open_t-1', 'high_t-1', 'low_t-1', 'close_t-1', 'turnover_t-1', 'vwap_t-1', \
-                            'open_t-2', 'high_t-2', 'low_t-2', 'close_t-2', 'turnover_t-2', 'vwap_t-2', \
-                            'open_t-3', 'high_t-3', 'low_t-3', 'close_t-3', 'turnover_t-3', 'vwap_t-3', \
-                            'open_t-4', 'high_t-4', 'low_t-4', 'close_t-4', 'turnover_t-4', 'vwap_t-4']
-        need_col_df_list = [d[need_cols] for d in data.values()]
-        org_shape = need_col_df_list[0].shape
-        nd_data = np.vstack(need_col_df_list).reshape((len(need_col_df_list),) + org_shape)
+        df_list = list(data.values())
+        org_shape = df_list[0].shape
+        nd_data = np.vstack(df_list).reshape((len(df_list),) + org_shape)
         return nd_data
 
-    def __create_dataset(self, data, batch_size=1, length=1):
-        if data.shape[0] % batch_size != 0:
-            raise ValueError('バッチサイズが不正です。')
-        else:
-            batch_num = data.shape[0] / batch_size
-
-        if data.shape[1] % length != 0:
-            raise ValueError('レングスが不正です。')
-        else:
-            split_num = data.shape[1] / length
-
-        batch_list = np.split(data, batch_num, axis=0)
-        split_list = [np.concatenate(np.split(batch, split_num, axis=1)) for batch in batch_list]
-        data = np.concatenate(split_list)
-        return data
 
     def __padding_dummy(self, data, length, position: Tuple):
         org_shape = data.shape
@@ -189,39 +208,15 @@ class ModelPredict(Predict):
         改善案があれば対応
         """
 
-        #
-        # データの存在確認
-        #
-        if not date in self.__index:
-            raise ValueError('指定日付の価格データが存在しません。')
-
-        #
+        # データの準備
+        dataset = self.__prepare_data_for_predict(date)
         # modelからpredict
-        #
-
-        # indexから該当日付が何番目のデータか判別する
-        data_position = self.__index.index(date)
-        # 当該日のデータを取得
-        data_of_target_date = self.__data_for_predict[:, data_position:data_position + 1, :]
-        # model用に整形
-        dataset = self.__create_dataset(data_of_target_date, 1, 1)
-
-        # 予測
         __model = load_model(stock_model)
         predict = __model.predict(dataset, batch_size=1)
-
-        # shapeを戻す
-        predict = predict.reshape(data_of_target_date.shape[:2] + (len(self.predict_columns), ))
         # reverse scalingのためにdummyでレングスを合わせる
         predict_with_dummy = self.__padding_dummy(predict, len(self.scaling_target_columns), (0, 5))
-        
-        # dictに変換
-        predict_scaling_dict = dict()
-        target_code_list = list(self.__data.keys())
-        for idx, d in enumerate(predict_with_dummy):
-            predict_scaling_dict[target_code_list[idx]] = pd.DataFrame(d, columns=self.scaling_target_columns)
         # reverse scalinig
-        predict_data = self.__reverse_scaling_data(predict_scaling_dict)
+        predict_data = self.__reverse_scaling_data(predict_with_dummy)
 
         # 始値と、vwapの差を算出
         price_gap_dict = dict()

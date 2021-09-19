@@ -121,6 +121,36 @@ def filter_no_exec_stocks(data, bgn_date: datetime, end_date: datetime):
     return filtered_data
 
 
+def filter_vulnerable_stocks(data, base_rate=0.1):
+    """
+    値動きの激しい銘柄を除去する
+
+    Params
+    ---------
+    data: dict
+        フィルタリングを行うdata (key: 銘柄コード, value: pandas Dataframe)
+    base_rate: float
+        除去基準率
+        一日の値動きが、この率を超える日がある銘柄を除去
+
+    Returns
+    ---------
+    0: dict
+        フィルタリングした辞書データ
+    """
+    filtered_data = dict()
+
+    for code, code_data in data.items():
+        check = code_data.copy()
+        check['open_diff'] = check.diff(1)['open']
+        check['open_diff_rate'] = check['open_diff'] / check['open']
+
+        if check.max()['open_diff_rate'] < base_rate:
+            # 値上がり率が基準以下だった場合
+            filtered_data[code] = code_data
+    return filtered_data
+
+
 def filter_disignated_stocks(data):
     exclude_file = 'file/data_exclude.lst'
     with open(exclude_file, 'r') as f:
@@ -417,26 +447,6 @@ def calc_moving_average(data: dict, days: int=10, column: str='end'):
     for key, d in data.items():
         data[key] = calc(d)
 
-    return data
-
-
-def calc_std(data: dict, column: str, days: int=10):
-    """
-    指定カラムの標準偏差カラムを末尾に追加する
-
-    Params
-    ---------
-    data: dict
-        データ
-    column: str
-        カラム名
-    days: int
-        標準偏差算出日数
-    """
-    for code, d in data.items():
-        rolling = d.rolling(days)
-        std = rolling.std()[[column]].rename(columns={column: '{}_std_{}days'.format(column, days)})
-        data[code] = pd.concat([d, std], axis=1)
     return data
 
 
