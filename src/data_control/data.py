@@ -121,7 +121,7 @@ def filter_no_exec_stocks(data, bgn_date: datetime, end_date: datetime):
     return filtered_data
 
 
-def filter_vulnerable_stocks(data, base_rate=0.1):
+def filter_vulnerable_stocks(data, date, go_back_days, base_rate=0.1):
     """
     値動きの激しい銘柄を除去する
 
@@ -141,12 +141,20 @@ def filter_vulnerable_stocks(data, base_rate=0.1):
     filtered_data = dict()
 
     for code, code_data in data.items():
-        check = code_data.copy()
+        # 指定日付からgo_back_days分のデータを取得
+        check = code_data.copy().reset_index()
+        data_of_date = check[check['chart_date'] == date]
+        if len(data_of_date) == 0:
+            raise ValueError('指定日付の価格データが存在しません。 {}'.format(date))
+        data_position = data_of_date.index[0]
+        check = check[data_position - go_back_days:data_position + 1]
+
+        # 値動きの割合をチェック
         check['open_diff'] = check.diff(1)['open']
         check['open_diff_rate'] = check['open_diff'] / check['open']
 
-        if check.max()['open_diff_rate'] < base_rate:
-            # 値上がり率が基準以下だった場合
+        if check['open_diff_rate'].abs().max() < base_rate:
+            # 値動き率が基準以下だった場合
             filtered_data[code] = code_data
     return filtered_data
 

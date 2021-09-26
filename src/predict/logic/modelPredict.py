@@ -14,7 +14,7 @@ from database.models import DailyChart
 
 stock_model = 'stock_model_202108290146.pickle'
 stored_scaler = 'scaler_dict_202109110933.pickle'
-bgn_datetime = datetime(2020, 3, 1)
+bgn_datetime = datetime(2019, 11, 1)
 end_datetime = datetime(2021, 3, 31)
 
 
@@ -49,8 +49,15 @@ class ModelPredict(Predict):
 
 
     def __prepare_data_for_predict(self, date: datetime):
+
+        data_for_predict = self.__data
+
+        # 直近で値動きの激しい銘柄を削除
+        data_for_predict = dt.filter_vulnerable_stocks(data_for_predict, date, 3, 0.05)
+        data_for_predict = dt.filter_vulnerable_stocks(data_for_predict, date, 60, 0.15)
+
         # 指定日のデータを作成
-        data_for_predict = self.__extract_data_of_date(date)
+        data_for_predict = self.__extract_data_of_date(data_for_predict, date)
 
         # 必要カラムを抽出
         data_for_predict = self.__setup_columns(data_for_predict)
@@ -62,20 +69,21 @@ class ModelPredict(Predict):
         data_for_predict = self.__load_past_data(data_for_predict)
 
         # ndarrayへ変換
+        code_list = list(data_for_predict.keys())
         data_for_predict = self.__convert_to_ndarray(data_for_predict)
 
-        return data_for_predict
+        return data_for_predict, code_list
 
 
-    def __extract_data_of_date(self, date: datetime):
+    def __extract_data_of_date(self, data: dict, date: datetime):
         """
         指定日付の予測に必要なデータを抽出する
 
 
         """
         extract_data = dict()
-        for code in self.__data:
-            code_data = self.__data[code].reset_index()
+        for code in data:
+            code_data = data[code].reset_index()
             data_of_date = code_data[code_data['chart_date'] == date]
             if len(data_of_date) == 0:
                 raise ValueError('指定日付の価格データが存在しません。 {}'.format(date))
@@ -114,7 +122,7 @@ class ModelPredict(Predict):
 
         return scaling_data
 
-    def __reverse_scaling_data(self, data: np.array):
+    def __reverse_scaling_data(self, data: np.array, code_list: list):
         """
         スケーリングされたデータを元に戻す
 
@@ -135,7 +143,6 @@ class ModelPredict(Predict):
 
         # dataをdictへ
         data_dict = dict()
-        code_list = list(scaler_dict.keys())
         for idx, code_data in enumerate(data):
             data_dict[code_list[idx]] = pd.DataFrame(code_data, columns=self.scaling_target_columns)
 
@@ -209,14 +216,14 @@ class ModelPredict(Predict):
         """
 
         # データの準備
-        dataset = self.__prepare_data_for_predict(date)
+        dataset, code_list = self.__prepare_data_for_predict(date)
         # modelからpredict
         __model = load_model(stock_model)
         predict = __model.predict(dataset, batch_size=1)
         # reverse scalingのためにdummyでレングスを合わせる
         predict_with_dummy = self.__padding_dummy(predict, len(self.scaling_target_columns), (0, 5))
         # reverse scalinig
-        predict_data = self.__reverse_scaling_data(predict_with_dummy)
+        predict_data = self.__reverse_scaling_data(predict_with_dummy, code_list)
 
         # 始値と、vwapの差を算出
         price_gap_dict = dict()
