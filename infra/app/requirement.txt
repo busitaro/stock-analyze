@@ -1,2 +1,6 @@
 sqlalchemy==1.4.16
 pymysql==1.0.2
+Keras==2.4.3
+tensorflow==2.5.0
+injector==0.18.4
+mplfinance==0.12.7a17
