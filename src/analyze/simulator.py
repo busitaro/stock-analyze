@@ -1,12 +1,10 @@
-import csv
 import sys
 import traceback
 from os import getpid
 from datetime import datetime
 
 from injector import Injector, inject
-from operator import add
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 from itertools import product
 from psutil import cpu_count
 import pandas as pd
@@ -127,9 +125,6 @@ class Simulation():
                 history_df['time'] = idx
                 histories_df = pd.concat([histories_df, history_df])
 
-                # amount_profit_list.append(result[1])
-                # remain_profit_list.append(result[2])
-
             return result_df, histories_df
         except Exception as e:
             print('==== {} ====\n{}'.format(getpid(), traceback.format_exc()))
@@ -224,10 +219,6 @@ class Simulation():
                     # 日付を進める
                     date = bs_day.next(date)
             else:
-                # end_dateまで売却条件が成立しなかった場合
-                # history['settle_date'] = ''
-                # history['benefit'] = 0
-                # history['sell_price'] = ''
                 unsettled_profit = now_profit * unit
 
             history_df = history_df.append(history, ignore_index=True)
