@@ -20,7 +20,7 @@ from database.control import truncate, insert
 class Simulation():
 
     @inject
-    def __init__(self, predict: Predict, output_path='./simulate'):
+    def __init__(self, predict: Predict):
         """
         コンストラクタ
 
@@ -36,7 +36,6 @@ class Simulation():
             シミュレーションに利用する、損切する下落標準偏差のリスト
         """
         self.__predict = predict
-        self.__output_path = output_path
 
     def run(self, bgn_date: datetime, end_date: datetime, profit_list: list, loss_cut_std_list: list, count: int):
         """
