@@ -4,7 +4,7 @@ import pandas as pd
 
 
 class BusinessDay:
-    file_path = 'file/business_day.csv'
+    file_path = '/app/src/file/business_day.csv'
 
     def __init__(self):
         #csvを読み込む
