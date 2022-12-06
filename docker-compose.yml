@@ -16,6 +16,7 @@ services:
     volumes:
       - ./no_commit:/app/data
       - ./src:/app/src
+      - ./note:/app/note
     restart: always
     command: start-notebook.sh --NotebookApp.token=''
   db:
